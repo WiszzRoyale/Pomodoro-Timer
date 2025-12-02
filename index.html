@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StudyFocus - Productivity Manager</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  </head>
+  <body>
+    <div id="app">
+      <!-- Login Page -->
+      <div class="login-container" v-if="!isLoggedIn">
+        <div class="login-card">
+          <div class="app-logo">
+            <i class="fas fa-graduation-cap"></i>
+            <h1>StudyFocus</h1>
+          </div>
+          <p class="tagline">Enhance your focus with Pomodoro technique</p>
+          <div class="login-form">
+            <div class="form-group">
+              <label for="username">
+                <i class="fas fa-user"></i> Username
+              </label>
+              <input type="text" id="username" v-model="username" placeholder="Enter username">
+            </div>
+            <div class="form-group">
+              <label for="studentId">
+                <i class="fas fa-id-card"></i> Student ID
+              </label>
+              <input type="text" id="studentId" v-model="studentId" placeholder="Enter student ID">
+            </div>
+            <button class="login-btn" @click="login">
+              <i class="fas fa-sign-in-alt"></i> Start Studying
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main App -->
+      <div class="app-container" v-else>
+        <header class="app-header">
+          <div class="user-info" @click="toggleSettings">
+            <div class="profile-container">
+              <img :src="profilePic || 'https://ui-avatars.com/api/?name='+username" 
+                  alt="Profile" class="profile-pic">
+            </div>
+            <div class="user-details">
+              <h3>{{ username }}</h3>
+              <p>ID: {{ studentId }}</p>
+            </div>
+          </div>
+          
+          <div class="day-selector">
+            <div class="day-control">
+              <button class="day-btn" @click="changeDay(-1)">
+                <i class="fas fa-chevron-left"></i>
+              </button>
+              <h2>Day {{ currentDay }}</h2>
+              <button class="day-btn" @click="changeDay(1)">
+                <i class="fas fa-chevron-right"></i>
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <!-- Settings Menu -->
+        <div class="settings-menu" v-if="showSettings">
+          <div class="settings-header">
+            <h3><i class="fas fa-cog"></i> Settings</h3>
+            <button class="close-btn" @click="showSettings = false">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          <div class="settings-option" @click="uploadPhoto">
+            <i class="fas fa-user-circle"></i> Change Profile
+          </div>
+          <div class="settings-option" @click="openProgressReport">
+            <i class="fas fa-chart-line"></i> Full Progress Report
+          </div>
+          <div class="settings-option" @click="logout">
+            <i class="fas fa-sign-out-alt"></i> Logout
+          </div>
+        </div>
+
+        <main class="app-main">
+          <!-- Timer Section -->
+          <section class="timer-section">
+            <div class="section-header">
+              <h3><i class="fas fa-clock"></i> Pomodoro Timer</h3>
+              <span class="timer-type" :class="timerTypeClass">
+                {{ timerTypeText }}
+              </span>
+            </div>
+            <div class="timer-display">
+              <div class="timer-circle">
+                <svg width="200" height="200">
+                  <circle class="timer-bg" cx="100" cy="100" r="90"></circle>
+                  <circle class="timer-progress" cx="100" cy="100" r="90"
+                    :stroke-dasharray="`${circumference} ${circumference}`"
+                    :stroke-dashoffset="progressOffset"></circle>
+                  <text x="100" y="110" text-anchor="middle" class="timer-text">
+                    {{ formatTime(timerTime) }}
+                  </text>
+                </svg>
+              </div>
+              <div class="timer-controls">
+                <button class="timer-btn start-btn" @click="startTimer" v-if="!isRunning">
+                  <i class="fas fa-play"></i> Start
+                </button>
+                <button class="timer-btn pause-btn" @click="pauseTimer" v-else>
+                  <i class="fas fa-pause"></i> Pause
+                </button>
+                <button class="timer-btn reset-btn" @click="resetTimer">
+                  <i class="fas fa-redo"></i> Reset
+                </button>
+              </div>
+            </div>
+            <div class="timer-settings">
+              <div class="setting">
+                <label for="studyTime">
+                  <i class="fas fa-book"></i> Study (min)
+                </label>
+                <input type="number" id="studyTime" v-model.number="studyTime" min="1">
+              </div>
+              <div class="setting">
+                <label for="breakTime">
+                  <i class="fas fa-coffee"></i> Break (min)
+                </label>
+                <input type="number" id="breakTime" v-model.number="breakTime" min="1">
+              </div>
+            </div>
+            <div class="location-info">
+              <i class="fas fa-map-marker-alt"></i>
+              <span v-if="location">{{ location }}</span>
+              <span v-else>Fetching location...</span>
+            </div>
+          </section>
+
+          <!-- Task Section -->
+          <section class="task-section">
+            <div class="section-header">
+              <h3><i class="fas fa-tasks"></i> Daily Tasks</h3>
+              <div class="task-stats">
+                <span>{{ completedTasks }}/{{ tasks.length }} completed</span>
+              </div>
+            </div>
+            <form class="task-form" @submit.prevent="addTask">
+              <input type="text" v-model="newTask" placeholder="Add a new task...">
+              <button type="submit" class="add-btn">
+                <i class="fas fa-plus"></i>
+              </button>
+            </form>
+            <div class="task-list">
+              <div class="task-item" v-for="(task, index) in activeTasks" :key="task.id">
+                <label class="task-checkbox">
+                  <input type="checkbox" v-model="task.completed" @change="completeTask(task)">
+                  <span class="checkmark"></span>
+                </label>
+                <span class="task-text" :class="{ completed: task.completed }">
+                  {{ task.text }}
+                </span>
+              </div>
+              <div class="empty-state" v-if="tasks.length === 0">
+                <i class="fas fa-clipboard-list"></i>
+                <p>No tasks yet. Add your first task!</p>
+              </div>
+            </div>
+          </section>
+
+          <!-- Progress Section -->
+          <section class="progress-section">
+            <div class="section-header">
+              <h3><i class="fas fa-chart-line"></i> Today's Progress</h3>
+            </div>
+            <div class="daily-motivation">
+              <i class="fas fa-lightbulb"></i>
+              <p>{{ dailyMotivation }}</p>
+            </div>
+            <div class="progress-stats">
+              <div class="stat-card">
+                <div class="stat-icon">
+                  <i class="fas fa-clock"></i>
+                </div>
+                <div class="stat-content">
+                  <div class="stat-value">{{ currentStudyTime }} min</div>
+                  <div class="stat-label">Study Time</div>
+                </div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon">
+                  <i class="fas fa-check-circle"></i>
+                </div>
+                <div class="stat-content">
+                  <div class="stat-value">{{ completedTasks }}</div>
+                  <div class="stat-label">Tasks Done</div>
+                </div>
+              </div>
+            </div>
+            <div class="daily-chart">
+              <canvas ref="dailyChart" width="300" height="150"></canvas>
+            </div>
+          </section>
+        </main>
+
+        <!-- Full Progress Report -->
+        <div class="full-progress-report" v-if="showProgressReport">
+          <div class="report-header">
+            <h2><i class="fas fa-chart-bar"></i> Full Progress Report</h2>
+            <button class="close-btn" @click="showProgressReport = false">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          <div class="motivation-message">
+            <i class="fas fa-quote-left"></i>
+            <p>{{ fullMotivation }}</p>
+            <i class="fas fa-quote-right"></i>
+          </div>
+          <div class="chart-container">
+            <canvas ref="fullProgressChart" width="400" height="300"></canvas>
+          </div>
+          <div class="progress-table">
+            <div class="table-header">
+              <div>Day</div>
+              <div>Study Time</div>
+              <div>Tasks Completed</div>
+            </div>
+            <div class="table-row" v-for="record in studyRecords" :key="record.day">
+              <div>Day {{ record.day }}</div>
+              <div>{{ record.studyTime }} min</div>
+              <div>{{ record.completedTasks }}/{{ record.totalTasks }}</div>
+            </div>
+          </div>
+          <button class="back-btn" @click="showProgressReport = false">
+            <i class="fas fa-arrow-left"></i> Back to Main
+          </button>
+        </div>
+
+        <!-- Hidden file input for profile photo -->
+        <input type="file" ref="fileInput" style="display: none;"
+              accept="image/*" @change="handleFileUpload">
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
